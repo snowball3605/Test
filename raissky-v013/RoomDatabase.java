@@ -98,7 +98,7 @@ final class RoomDatabase {
         HttpRequest releaseRequest = HttpRequest.newBuilder(RELEASE_API)
                 .timeout(Duration.ofSeconds(20))
                 .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "RaisSky-Secrets/0.1.3")
+                .header("User-Agent", "RaisSky-Secrets/0.1.6")
                 .build();
         HttpResponse<String> releaseResponse = client.send(releaseRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         if (releaseResponse.statusCode() / 100 != 2) {
@@ -125,7 +125,7 @@ final class RoomDatabase {
 
         HttpRequest jarRequest = HttpRequest.newBuilder(URI.create(downloadUrl))
                 .timeout(Duration.ofSeconds(45))
-                .header("User-Agent", "RaisSky-Secrets/0.1.3")
+                .header("User-Agent", "RaisSky-Secrets/0.1.6")
                 .build();
         HttpResponse<byte[]> jarResponse = client.send(jarRequest, HttpResponse.BodyHandlers.ofByteArray());
         if (jarResponse.statusCode() / 100 != 2) {
