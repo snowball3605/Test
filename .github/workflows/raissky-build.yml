@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - chatgpt-raissky-secrets-build-20260819
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
