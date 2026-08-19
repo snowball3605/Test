@@ -25,6 +25,7 @@ jobs:
         run: |
           mkdir -p raissky-work
           tar -xzf raissky-build/source.tar.gz -C raissky-work
+          cp raissky-build/ClientController.java raissky-work/src/main/java/dev/raistey/raisskysecrets/ClientController.java
       - name: Build Forge mod
         working-directory: raissky-work
         run: gradle clean build --no-daemon --stacktrace
