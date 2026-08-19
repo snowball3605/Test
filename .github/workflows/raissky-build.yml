@@ -1,0 +1,31 @@
+name: Build RaisSky Secrets Forge 26.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chatgpt-raissky-secrets-build-20260819
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - name: Extract source
+        run: |
+          mkdir -p raissky-work
+          tar -xzf raissky-build/source.tar.gz -C raissky-work
+      - name: Build Forge mod
+        working-directory: raissky-work
+        run: gradle clean build --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RaisSky-Secrets-Forge-26.2
+          path: raissky-work/build/libs/*.jar
