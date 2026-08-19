@@ -5,7 +5,7 @@ clientSideOnly=true
 
 [[mods]]
 modId="raissky_secrets"
-version="0.1.4"
+version="0.1.5"
 displayName="RaisSky Secrets"
 authors="Raistey"
 description='''
