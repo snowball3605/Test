@@ -1,4 +1,4 @@
-name: Build RaisSky Secrets Forge 26.2 v0.1.4
+name: Build RaisSky Secrets Forge 26.2 v0.1.5
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
           mkdir -p raissky-work
           curl -L --fail --retry 3 -o /tmp/raissky-source.tar.gz https://raw.githubusercontent.com/snowball3605/Test/c1b0f474d309d3849778357a16ca36bf71bb4848/raissky-build/source.tar.gz
           tar -xzf /tmp/raissky-source.tar.gz -C raissky-work
-      - name: Apply v0.1.4 source overrides
+      - name: Apply v0.1.5 source overrides
         run: |
           cp raissky-v013/build.gradle raissky-work/build.gradle
           cp raissky-v013/ClientController.java raissky-work/src/main/java/dev/raistey/raisskysecrets/ClientController.java
@@ -38,13 +38,14 @@ jobs:
       - name: Build exact Forge 65.1.0 target
         working-directory: raissky-work
         run: gradle clean build --no-daemon --stacktrace
-      - name: Verify JAR metadata
+      - name: Verify JAR metadata and bat tracking
         working-directory: raissky-work
         run: |
-          jar tf build/libs/RaisSky-Secrets-Forge-26.2-0.1.4.jar | grep -E 'META-INF/mods.toml|pack.mcmeta|SecretStateTracker.class|SecretHud.class'
-          javap -classpath build/libs/RaisSky-Secrets-Forge-26.2-0.1.4.jar -c -p dev.raistey.raisskysecrets.SecretStateTracker >/tmp/tracker.javap
-          grep -q 'countSecretItems' /tmp/tracker.javap
+          jar tf build/libs/RaisSky-Secrets-Forge-26.2-0.1.5.jar | grep -E 'META-INF/mods.toml|pack.mcmeta|SecretStateTracker.class|SecretHud.class'
+          javap -classpath build/libs/RaisSky-Secrets-Forge-26.2-0.1.5.jar -c -p dev.raistey.raisskysecrets.SecretStateTracker >/tmp/tracker.javap
+          grep -q 'onEntityRemoved' /tmp/tracker.javap
+          grep -q 'net/minecraft/world/entity/ambient/Bat' /tmp/tracker.javap
       - uses: actions/upload-artifact@v4
         with:
-          name: RaisSky-Secrets-Forge-26.2-0.1.4
-          path: raissky-work/build/libs/RaisSky-Secrets-Forge-26.2-0.1.4.jar
+          name: RaisSky-Secrets-Forge-26.2-0.1.5
+          path: raissky-work/build/libs/RaisSky-Secrets-Forge-26.2-0.1.5.jar
