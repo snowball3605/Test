@@ -118,8 +118,14 @@ final class ClientController {
 
         if (ticks % 10 == 0) MATCHER.update(mc);
         Models.RoomCandidate room = MATCHER.matched();
-        List<Models.WorldWaypoint> allWaypoints = MATCHER.worldWaypoints(showUtility);
-        List<Models.WorldWaypoint> waypoints = SECRET_STATE.visible(room, allWaypoints);
+
+        // Always ask for utility markers here so state tracking can still retire Entrance/Superboom
+        // even when the user has temporarily hidden route helpers with O.
+        List<Models.WorldWaypoint> allForTracking = MATCHER.worldWaypoints(true);
+        boolean stateChanged = SECRET_STATE.tick(mc, room, allForTracking);
+
+        List<Models.WorldWaypoint> allForDisplay = showUtility ? allForTracking : MATCHER.worldWaypoints(false);
+        List<Models.WorldWaypoint> waypoints = SECRET_STATE.visible(room, allForDisplay);
         snapshot = new Models.HudSnapshot(
                 true,
                 databaseState,
@@ -132,6 +138,7 @@ final class ClientController {
                 waypoints,
                 showUtility);
 
+        if (stateChanged && room != null) refreshSnapshotImmediately(mc, room);
         if (ticks % 5 == 0 && !waypoints.isEmpty()) spawnMarkers(mc, waypoints);
     }
 
@@ -141,17 +148,20 @@ final class ClientController {
         Models.RoomCandidate room = MATCHER.matched();
         if (room == null) return;
         List<Models.WorldWaypoint> all = MATCHER.worldWaypoints(true);
-        if (SECRET_STATE.onRightClick(room, all, event.getPos())) {
+        String heldItemName = event.getItemStack().isEmpty() ? "" : event.getItemStack().getHoverName().getString();
+        if (SECRET_STATE.onRightClick(room, all, event.getPos(), heldItemName)) {
             refreshSnapshotImmediately(mc, room);
         }
     }
 
     private static void onSystemMessage(SystemMessageReceivedEvent event) {
-        if (!event.isOverlay()) return;
         Minecraft mc = Minecraft.getInstance();
         if (!enabled || mc.player == null || mc.level == null) return;
         Models.RoomCandidate room = MATCHER.matched();
         if (room == null) return;
+
+        // Do not require overlay=true. On modern 26.2 stacks Hypixel's secret-counter line can arrive
+        // through SystemMessageReceivedEvent without being flagged as an overlay message.
         Matcher counter = SECRET_COUNTER.matcher(event.getMessage().getString());
         if (!counter.find()) return;
         int found = Integer.parseInt(counter.group(1));
