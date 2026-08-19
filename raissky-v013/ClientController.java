@@ -10,6 +10,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.SystemMessageReceivedEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.TickEvent;
 
@@ -48,6 +49,7 @@ final class ClientController {
         AddGuiOverlayLayersEvent.BUS.addListener(ClientController::registerHud);
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
         PlayerInteractEvent.RightClickBlock.BUS.addListener(ClientController::onRightClickBlock);
+        EntityLeaveLevelEvent.BUS.addListener(ClientController::onEntityLeaveLevel);
         SystemMessageReceivedEvent.BUS.addListener(ClientController::onSystemMessage);
         beginDatabaseLoad(false);
     }
@@ -150,6 +152,17 @@ final class ClientController {
         List<Models.WorldWaypoint> all = MATCHER.worldWaypoints(true);
         String heldItemName = event.getItemStack().isEmpty() ? "" : event.getItemStack().getHoverName().getString();
         if (SECRET_STATE.onRightClick(room, all, event.getPos(), heldItemName)) {
+            refreshSnapshotImmediately(mc, room);
+        }
+    }
+
+    private static void onEntityLeaveLevel(EntityLeaveLevelEvent event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!enabled || mc.player == null || mc.level == null || event.getLevel() != mc.level) return;
+        Models.RoomCandidate room = MATCHER.matched();
+        if (room == null) return;
+        List<Models.WorldWaypoint> all = MATCHER.worldWaypoints(true);
+        if (SECRET_STATE.onEntityRemoved(room, all, event.getEntity())) {
             refreshSnapshotImmediately(mc, room);
         }
     }
