@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Locale;
 
 final class Models {
     private Models() {}
@@ -16,8 +17,10 @@ final class Models {
 
     record RelativeSecret(int secretIndex, String name, String category, int x, int y, int z) {
         boolean isUtility() {
-            String c = category.toLowerCase();
-            return c.equals("entrance") || c.equals("stonk") || c.equals("superboom") || c.equals("lever") || c.equals("redstone_key");
+            String c = category.toLowerCase(Locale.ROOT);
+            return c.equals("entrance") || c.equals("stonk") || c.equals("superboom")
+                    || c.equals("lever") || c.equals("redstone_key") || c.equals("key")
+                    || c.equals("aotv") || c.equals("pearl");
         }
     }
 
