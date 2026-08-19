@@ -5,12 +5,12 @@ clientSideOnly=true
 
 [[mods]]
 modId="raissky_secrets"
-version="0.1.5"
+version="0.1.6"
 displayName="RaisSky Secrets"
 authors="Raistey"
 description='''
 Modern Forge 26.2 Hypixel SkyBlock Dungeon secret waypoints.
-Auto-detects rooms, shows a clean next-secret HUD, route helpers and client-side marker particles.
+Auto-detects rooms, shows a clean next-secret HUD, route helpers and hybrid teammate-aware completion detection.
 '''
 
 [[dependencies.raissky_secrets]]
