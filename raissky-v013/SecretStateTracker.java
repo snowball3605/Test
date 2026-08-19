@@ -2,6 +2,8 @@ package dev.raistey.raisskysecrets;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ambient.Bat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
@@ -80,6 +82,22 @@ final class SecretStateTracker {
         return changed;
     }
 
+    /**
+     * Modern Forge fires EntityLeaveLevelEvent on the client when a tracked entity is removed.
+     * A dungeon bat secret is considered solved only when a Bat is removed with health <= 0,
+     * mirroring the reliable approach used by mature secret-waypoint mods. The waypoint lookup is
+     * based on the bat's position, not on the local player's position, so a nearby teammate killing
+     * the bat is handled as well.
+     */
+    boolean onEntityRemoved(Models.RoomCandidate room, List<Models.WorldWaypoint> all, Entity entity) {
+        if (room == null || all.isEmpty() || !(entity instanceof Bat bat) || bat.getHealth() > 0.0F) return false;
+        RoomState state = state(room);
+        Models.WorldWaypoint nearest = nearestUnfound(all, state, bat.position(), Set.of("bat"), 16.0);
+        if (nearest == null) return false;
+        markSecret(state, nearest.secretIndex(), nearest.pos());
+        return true;
+    }
+
     List<Models.WorldWaypoint> visible(Models.RoomCandidate room, List<Models.WorldWaypoint> all) {
         if (room == null || all.isEmpty()) return all;
         RoomState state = state(room);
@@ -146,8 +164,7 @@ final class SecretStateTracker {
         if (!increased && !firstUsefulObservation) return;
         if (System.currentTimeMillis() - state.lastDirectMarkMillis < 1200L) return;
 
-        // A counter increment can be caused by another teammate, so only consume a local Item/Bat marker
-        // when the player is close to it. On the first counter observation use a stricter radius.
+        // Counter remains a fallback for item/bat secrets. Direct bat removal detection is preferred.
         double radius = firstUsefulObservation ? 4.5 : 6.5;
         Models.WorldWaypoint nearest = nearestUnfound(all, state, playerPos, Set.of("item", "bat"), radius);
         if (nearest != null) markSecret(state, nearest.secretIndex(), nearest.pos());
