@@ -67,6 +67,21 @@ final class Models {
         }
     }
 
+    /** Compact state update exchanged between RaisSky clients. kind=S is a real secret, kind=U a route helper. */
+    record SyncUpdate(String roomInstanceKey, String kind, int secretIndex, int x, int y, int z) {
+        static SyncUpdate secret(String roomInstanceKey, int secretIndex) {
+            return new SyncUpdate(roomInstanceKey, "S", secretIndex, 0, 0, 0);
+        }
+
+        static SyncUpdate utility(String roomInstanceKey, BlockPos pos) {
+            return new SyncUpdate(roomInstanceKey, "U", 0, pos.getX(), pos.getY(), pos.getZ());
+        }
+
+        BlockPos pos() {
+            return new BlockPos(x, y, z);
+        }
+    }
+
     enum DatabaseState { LOADING, READY, ERROR }
 
     record HudSnapshot(
