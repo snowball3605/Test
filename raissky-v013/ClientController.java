@@ -31,6 +31,7 @@ final class ClientController {
 
     private static final RoomMatcher MATCHER = new RoomMatcher();
     private static final SecretStateTracker SECRET_STATE = new SecretStateTracker();
+    private static final PartySecretSync PARTY_SYNC = new PartySecretSync();
     private static final Pattern SECRET_COUNTER = Pattern.compile("(\\d{1,2})/(\\d{1,2}) Secrets");
     private static volatile Models.DatabaseState databaseState = Models.DatabaseState.LOADING;
     private static volatile String databaseMessage = "Preparing room database…";
@@ -66,6 +67,17 @@ final class ClientController {
 
     static Models.HudSnapshot snapshot() {
         return snapshot;
+    }
+
+    static boolean applyPartySync(Models.SyncUpdate update) {
+        return SECRET_STATE.applySynced(update);
+    }
+
+    static void onPartySyncChanged() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return;
+        Models.RoomCandidate room = MATCHER.matched();
+        if (room != null) refreshSnapshotImmediately(mc, room);
     }
 
     private static void beginDatabaseLoad(boolean forceRefresh) {
@@ -121,10 +133,12 @@ final class ClientController {
         if (ticks % 10 == 0) MATCHER.update(mc);
         Models.RoomCandidate room = MATCHER.matched();
 
-        // Always include utility markers while tracking so nearby teammate interactions can retire
-        // Entrance/Superboom/Lever even if the player hides route helpers with O.
         List<Models.WorldWaypoint> allForTracking = MATCHER.worldWaypoints(true);
         boolean stateChanged = SECRET_STATE.tick(mc, room, allForTracking);
+
+        // Once a room is matched, enable the exact RaisSky-to-RaisSky layer. The two-second stable-roster
+        // gate inside PartySecretSync prevents the clients from freezing different half-loaded tab lists.
+        if (room != null) PARTY_SYNC.tick(mc, SECRET_STATE);
 
         List<Models.WorldWaypoint> allForDisplay = showUtility ? allForTracking : MATCHER.worldWaypoints(false);
         List<Models.WorldWaypoint> waypoints = SECRET_STATE.visible(room, allForDisplay);
@@ -173,7 +187,6 @@ final class ClientController {
         Models.RoomCandidate room = MATCHER.matched();
         if (room == null) return;
 
-        // Modern Hypixel can deliver this line with either overlay state, so parse both.
         Matcher counter = SECRET_COUNTER.matcher(event.getMessage().getString());
         if (!counter.find()) return;
         int found = Integer.parseInt(counter.group(1));
