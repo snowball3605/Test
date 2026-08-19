@@ -50,9 +50,8 @@ jobs:
           grep -q 'drainSyncUpdates' /tmp/tracker.javap
           grep -q 'snapshotSyncState' /tmp/tracker.javap
           grep -q 'applySynced' /tmp/tracker.javap
-          grep -q 'ntfy.sh' /tmp/sync.javap
-          grep -q 'buildAsync' /tmp/sync.javap
-          grep -q 'Cache' /tmp/sync.javap
+          grep -q 'publishSnapshot' /tmp/sync.javap
+          grep -q 'handleRelayMessage' /tmp/sync.javap
       - uses: actions/upload-artifact@v4
         with:
           name: RaisSky-Secrets-Forge-26.2-0.1.7
