@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'dev.raistey'
-version = '0.1.6'
+version = '0.1.7'
 
 base {
     archivesName = 'RaisSky-Secrets-Forge-26.2'
