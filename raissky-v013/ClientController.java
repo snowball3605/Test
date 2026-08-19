@@ -121,8 +121,8 @@ final class ClientController {
         if (ticks % 10 == 0) MATCHER.update(mc);
         Models.RoomCandidate room = MATCHER.matched();
 
-        // Always ask for utility markers here so state tracking can still retire Entrance/Superboom
-        // even when the user has temporarily hidden route helpers with O.
+        // Always include utility markers while tracking so nearby teammate interactions can retire
+        // Entrance/Superboom/Lever even if the player hides route helpers with O.
         List<Models.WorldWaypoint> allForTracking = MATCHER.worldWaypoints(true);
         boolean stateChanged = SECRET_STATE.tick(mc, room, allForTracking);
 
@@ -173,14 +173,13 @@ final class ClientController {
         Models.RoomCandidate room = MATCHER.matched();
         if (room == null) return;
 
-        // Do not require overlay=true. On modern 26.2 stacks Hypixel's secret-counter line can arrive
-        // through SystemMessageReceivedEvent without being flagged as an overlay message.
+        // Modern Hypixel can deliver this line with either overlay state, so parse both.
         Matcher counter = SECRET_COUNTER.matcher(event.getMessage().getString());
         if (!counter.find()) return;
         int found = Integer.parseInt(counter.group(1));
         int max = Integer.parseInt(counter.group(2));
         List<Models.WorldWaypoint> all = MATCHER.worldWaypoints(true);
-        SECRET_STATE.onSecretCounter(room, all, found, max, mc.player.position());
+        SECRET_STATE.onSecretCounter(mc, room, all, found, max);
         refreshSnapshotImmediately(mc, room);
     }
 
