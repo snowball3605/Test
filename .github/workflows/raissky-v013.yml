@@ -1,4 +1,4 @@
-name: Build RaisSky Secrets Forge 26.2 v0.1.6
+name: Build RaisSky Secrets Forge 26.2 v0.1.7
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
           mkdir -p raissky-work
           curl -L --fail --retry 3 -o /tmp/raissky-source.tar.gz https://raw.githubusercontent.com/snowball3605/Test/c1b0f474d309d3849778357a16ca36bf71bb4848/raissky-build/source.tar.gz
           tar -xzf /tmp/raissky-source.tar.gz -C raissky-work
-      - name: Apply v0.1.6 source overrides
+      - name: Apply v0.1.7 source overrides
         run: |
           cp raissky-v013/build.gradle raissky-work/build.gradle
           cp raissky-v013/ClientController.java raissky-work/src/main/java/dev/raistey/raisskysecrets/ClientController.java
@@ -32,23 +32,28 @@ jobs:
           cp raissky-v013/RoomMatcher.java raissky-work/src/main/java/dev/raistey/raisskysecrets/RoomMatcher.java
           cp raissky-v013/RoomDatabase.java raissky-work/src/main/java/dev/raistey/raisskysecrets/RoomDatabase.java
           cp raissky-v013/SecretStateTracker.java raissky-work/src/main/java/dev/raistey/raisskysecrets/SecretStateTracker.java
+          cp raissky-v013/PartySecretSync.java raissky-work/src/main/java/dev/raistey/raisskysecrets/PartySecretSync.java
           cp raissky-v013/RaisSkySecrets.java raissky-work/src/main/java/dev/raistey/raisskysecrets/RaisSkySecrets.java
           cp raissky-v013/mods.toml raissky-work/src/main/resources/META-INF/mods.toml
           cp raissky-v013/pack.mcmeta raissky-work/src/main/resources/pack.mcmeta
       - name: Build exact Forge 65.1.0 target
         working-directory: raissky-work
         run: gradle clean build --no-daemon --stacktrace
-      - name: Verify JAR metadata and hybrid tracking
+      - name: Verify JAR metadata and party sync
         working-directory: raissky-work
         run: |
-          JAR=build/libs/RaisSky-Secrets-Forge-26.2-0.1.6.jar
-          jar tf "$JAR" | grep -E 'META-INF/mods.toml|pack.mcmeta|SecretStateTracker.class|SecretHud.class'
+          JAR=build/libs/RaisSky-Secrets-Forge-26.2-0.1.7.jar
+          jar tf "$JAR" | grep -E 'META-INF/mods.toml|pack.mcmeta|SecretStateTracker.class|PartySecretSync.class|SecretHud.class'
           javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.SecretStateTracker >/tmp/tracker.javap
+          javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.PartySecretSync >/tmp/sync.javap
           grep -q 'onEntityRemoved' /tmp/tracker.javap
-          grep -q 'inferSingleSecretFromLoadedPlayers' /tmp/tracker.javap
-          grep -q 'net/minecraft/world/entity/item/ItemEntity' /tmp/tracker.javap
-          grep -q 'BlockStateProperties' /tmp/tracker.javap
+          grep -q 'drainSyncUpdates' /tmp/tracker.javap
+          grep -q 'snapshotSyncState' /tmp/tracker.javap
+          grep -q 'applySynced' /tmp/tracker.javap
+          grep -q 'ntfy.sh' /tmp/sync.javap
+          grep -q 'buildAsync' /tmp/sync.javap
+          grep -q 'Cache' /tmp/sync.javap
       - uses: actions/upload-artifact@v4
         with:
-          name: RaisSky-Secrets-Forge-26.2-0.1.6
-          path: raissky-work/build/libs/RaisSky-Secrets-Forge-26.2-0.1.6.jar
+          name: RaisSky-Secrets-Forge-26.2-0.1.7
+          path: raissky-work/build/libs/RaisSky-Secrets-Forge-26.2-0.1.7.jar
