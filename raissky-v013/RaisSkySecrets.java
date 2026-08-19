@@ -12,6 +12,6 @@ public final class RaisSkySecrets {
 
     public RaisSkySecrets(FMLJavaModLoadingContext context) {
         ClientController.register();
-        LOGGER.info("RaisSky Secrets 0.1.3 initialized for Minecraft 26.2 / Forge");
+        LOGGER.info("RaisSky Secrets 0.1.5 initialized for Minecraft 26.2 / Forge");
     }
 }
