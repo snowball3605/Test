@@ -9,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -16,21 +17,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 /**
  * Tracks completed secrets and route helpers for the current dungeon instance.
- *
- * v0.1.6 uses hybrid detection:
- *  - direct local interactions for chest/wither/lever/superboom;
- *  - entity removal for Bat and dropped Item secrets (works when a nearby teammate solves them too);
- *  - passive block-state checks for route helpers;
- *  - room secret-counter deltas + all loaded dungeon-player positions to infer a teammate's nearby chest/item/bat/wither;
- *  - full-room completion always clears every indexed waypoint.
- *
- * We deliberately do not guess a specific waypoint when a distant teammate solves a partial room and their
- * entity/player is not loaded on this client. Hypixel can reveal that the room count changed without revealing
- * which exact secret changed, so hiding an arbitrary marker would be worse than leaving an uncertain one visible.
+ * v0.1.7 keeps the v0.1.6 hybrid detector and adds exact mod-to-mod sync updates.
  */
 final class SecretStateTracker {
     private static final Set<String> SECRET_ITEM_NAMES = Set.of(
@@ -41,6 +33,7 @@ final class SecretStateTracker {
 
     private Object levelIdentity;
     private final Map<String, RoomState> rooms = new HashMap<>();
+    private final Queue<Models.SyncUpdate> pendingSync = new ArrayDeque<>();
     private int lastInventorySecretItemCount = -1;
 
     void updateLevel(Minecraft mc) {
@@ -48,11 +41,11 @@ final class SecretStateTracker {
         if (now != levelIdentity) {
             levelIdentity = now;
             rooms.clear();
+            pendingSync.clear();
             lastInventorySecretItemCount = -1;
         }
     }
 
-    /** Passive detection that runs every client tick for the currently matched room. */
     boolean tick(Minecraft mc, Models.RoomCandidate room, List<Models.WorldWaypoint> all) {
         if (room == null || all.isEmpty() || mc.player == null || mc.level == null) return false;
         RoomState state = state(room);
@@ -60,60 +53,47 @@ final class SecretStateTracker {
         Vec3 localPlayerPos = mc.player.position();
         List<Vec3> loadedPlayers = loadedPlayerPositions(mc);
 
-        // Entrance is a route helper, not a secret. Any loaded dungeon player reaching it means it has served its purpose.
         for (Models.WorldWaypoint waypoint : all) {
             if (state.hiddenUtilityPositions.contains(waypoint.pos())) continue;
-            String category = category(waypoint);
-            if (category.equals("entrance") && anyPlayerWithin(loadedPlayers, waypoint.center(), 2.8)) {
-                changed |= state.hiddenUtilityPositions.add(waypoint.pos());
+            if (category(waypoint).equals("entrance") && anyPlayerWithin(loadedPlayers, waypoint.center(), 2.8)) {
+                changed |= hideUtilityLocal(room, state, waypoint.pos());
             }
         }
 
-        // Superboom: observe the wall itself. This also works when a nearby teammate detonates it.
         for (Models.WorldWaypoint waypoint : all) {
-            String category = category(waypoint);
-            if (!category.equals("superboom") || state.hiddenUtilityPositions.contains(waypoint.pos())) continue;
+            if (!category(waypoint).equals("superboom") || state.hiddenUtilityPositions.contains(waypoint.pos())) continue;
             if (!mc.level.hasChunkAt(waypoint.pos())) continue;
-
             int currentSolid = solidCount(mc, waypoint.pos());
             int baseline = state.superboomSolidBaseline.computeIfAbsent(waypoint.pos(), ignored -> currentSolid);
             boolean targetOpened = baseline > 0 && mc.level.getBlockState(waypoint.pos()).isAir();
             boolean neighbourhoodOpened = baseline >= 3 && currentSolid <= baseline - 2;
             if (anyPlayerWithin(loadedPlayers, waypoint.center(), 11.0) && (targetOpened || neighbourhoodOpened)) {
-                changed |= state.hiddenUtilityPositions.add(waypoint.pos());
+                changed |= hideUtilityLocal(room, state, waypoint.pos());
             }
         }
 
-        // Lever route helpers can be solved by a teammate without us receiving their right-click event.
-        // A powered lever is a strong local world-state signal, so retire that helper immediately.
         for (Models.WorldWaypoint waypoint : all) {
             if (!category(waypoint).equals("lever") || state.hiddenUtilityPositions.contains(waypoint.pos())) continue;
             if (!mc.level.hasChunkAt(waypoint.pos())) continue;
             var blockState = mc.level.getBlockState(waypoint.pos());
             if (blockState.hasProperty(BlockStateProperties.POWERED)
                     && blockState.getValue(BlockStateProperties.POWERED)) {
-                changed |= state.hiddenUtilityPositions.add(waypoint.pos());
+                changed |= hideUtilityLocal(room, state, waypoint.pos());
             }
         }
 
-        // Local inventory pickup fallback. EntityLeaveLevelEvent below is preferred because it also detects nearby teammates.
         int inventorySecretItems = countSecretItems(mc);
         if (lastInventorySecretItemCount >= 0 && inventorySecretItems > lastInventorySecretItemCount) {
             Models.WorldWaypoint item = nearestUnfound(all, state, localPlayerPos, Set.of("item"), 9.0);
             if (item != null) {
-                markSecret(state, item.secretIndex(), item.pos());
+                changed |= markSecretLocal(room, state, item.secretIndex(), item.pos());
                 state.lastDirectMarkMillis = System.currentTimeMillis();
-                changed = true;
             }
         }
         lastInventorySecretItemCount = inventorySecretItems;
         return changed;
     }
 
-    /**
-     * Entity removal is one of the strongest client-side signals because it is based on the secret entity,
-     * not on who caused it. Therefore nearby teammate Bat kills and Item pickups are handled as well.
-     */
     boolean onEntityRemoved(Models.RoomCandidate room, List<Models.WorldWaypoint> all, Entity entity) {
         if (room == null || all.isEmpty()) return false;
         RoomState state = state(room);
@@ -121,17 +101,17 @@ final class SecretStateTracker {
         if (entity instanceof Bat bat && bat.getHealth() <= 0.0F) {
             Models.WorldWaypoint nearest = nearestUnfound(all, state, bat.position(), Set.of("bat"), 16.0);
             if (nearest == null) return false;
-            markSecret(state, nearest.secretIndex(), nearest.pos());
-            state.lastDirectMarkMillis = System.currentTimeMillis();
-            return true;
+            boolean changed = markSecretLocal(room, state, nearest.secretIndex(), nearest.pos());
+            if (changed) state.lastDirectMarkMillis = System.currentTimeMillis();
+            return changed;
         }
 
         if (entity instanceof ItemEntity itemEntity && isSecretItem(itemEntity.getItem())) {
             Models.WorldWaypoint nearest = nearestUnfound(all, state, itemEntity.position(), Set.of("item"), 16.0);
             if (nearest == null) return false;
-            markSecret(state, nearest.secretIndex(), nearest.pos());
-            state.lastDirectMarkMillis = System.currentTimeMillis();
-            return true;
+            boolean changed = markSecretLocal(room, state, nearest.secretIndex(), nearest.pos());
+            if (changed) state.lastDirectMarkMillis = System.currentTimeMillis();
+            return changed;
         }
         return false;
     }
@@ -155,15 +135,14 @@ final class SecretStateTracker {
         Models.WorldWaypoint target = findInteractable(all, clicked);
         if (target == null) target = findInteractable(all, clicked.above());
         if (target != null) {
-            String category = category(target);
-            if (category.equals("lever") || category.equals("redstone_key") || category.equals("key")) {
-                state.hiddenUtilityPositions.add(target.pos());
-                return true;
+            String cat = category(target);
+            if (cat.equals("lever") || cat.equals("redstone_key") || cat.equals("key")) {
+                return hideUtilityLocal(room, state, target.pos());
             }
-            if (category.equals("chest") || category.equals("wither")) {
-                markSecret(state, target.secretIndex(), target.pos());
-                state.lastDirectMarkMillis = System.currentTimeMillis();
-                return true;
+            if (cat.equals("chest") || cat.equals("wither")) {
+                boolean changed = markSecretLocal(room, state, target.secretIndex(), target.pos());
+                if (changed) state.lastDirectMarkMillis = System.currentTimeMillis();
+                return changed;
             }
         }
 
@@ -171,19 +150,11 @@ final class SecretStateTracker {
         if (held.contains("superboom")) {
             Vec3 clickedCenter = new Vec3(clicked.getX() + 0.5, clicked.getY() + 0.5, clicked.getZ() + 0.5);
             Models.WorldWaypoint boom = nearestByCategory(all, clickedCenter, Set.of("superboom"), 5.0);
-            if (boom != null) {
-                state.hiddenUtilityPositions.add(boom.pos());
-                return true;
-            }
+            if (boom != null) return hideUtilityLocal(room, state, boom.pos());
         }
         return false;
     }
 
-    /**
-     * Hybrid teammate inference. The room counter tells us that a secret changed; loaded player positions tell us
-     * which waypoint is plausible. We only infer a specific secret for a single-step counter increase and only
-     * when the spatial match is confident. Large jumps / first observations are never guessed.
-     */
     void onSecretCounter(Minecraft mc, Models.RoomCandidate room, List<Models.WorldWaypoint> all, int found, int max) {
         if (room == null || all.isEmpty() || mc.player == null || mc.level == null) return;
         RoomState state = state(room);
@@ -198,20 +169,65 @@ final class SecretStateTracker {
             return;
         }
 
-        // First observation only tells us that some secrets were already solved; it does not identify which ones.
         if (previous < 0 || found <= previous) return;
         int delta = found - previous;
         if (delta != 1) return;
-
-        // A direct local/entity event usually arrives just before the counter. Avoid consuming a second secret.
         if (System.currentTimeMillis() - state.lastDirectMarkMillis < 1400L) return;
 
         Models.WorldWaypoint inferred = inferSingleSecretFromLoadedPlayers(mc, all, state);
         if (inferred != null) {
-            markSecret(state, inferred.secretIndex(), inferred.pos());
+            markSecretNoSync(state, inferred.secretIndex(), inferred.pos());
             RaisSkySecrets.LOGGER.info("Hybrid teammate detection inferred secret #{} ({}) at {}",
                     inferred.secretIndex(), inferred.category(), inferred.pos());
         }
+    }
+
+    List<Models.SyncUpdate> drainSyncUpdates() {
+        if (pendingSync.isEmpty()) return List.of();
+        List<Models.SyncUpdate> updates = new ArrayList<>(pendingSync.size());
+        Models.SyncUpdate update;
+        while ((update = pendingSync.poll()) != null) updates.add(update);
+        return updates;
+    }
+
+    List<Models.SyncUpdate> snapshotSyncState() {
+        List<Models.SyncUpdate> updates = new ArrayList<>();
+        for (Map.Entry<String, RoomState> entry : rooms.entrySet()) {
+            String roomKey = entry.getKey();
+            RoomState state = entry.getValue();
+            for (int index : state.foundSecretIndices) updates.add(Models.SyncUpdate.secret(roomKey, index));
+            for (BlockPos pos : state.hiddenUtilityPositions) updates.add(Models.SyncUpdate.utility(roomKey, pos));
+        }
+        return updates;
+    }
+
+    boolean applySynced(Models.SyncUpdate update) {
+        RoomState state = state(update.roomInstanceKey());
+        if ("S".equals(update.kind())) {
+            return update.secretIndex() > 0 && state.foundSecretIndices.add(update.secretIndex());
+        }
+        if ("U".equals(update.kind())) return state.hiddenUtilityPositions.add(update.pos());
+        return false;
+    }
+
+    private boolean markSecretLocal(Models.RoomCandidate room, RoomState state, int secretIndex, BlockPos fallbackPos) {
+        if (secretIndex > 0) {
+            if (!state.foundSecretIndices.add(secretIndex)) return false;
+            pendingSync.add(Models.SyncUpdate.secret(room.instanceKey(), secretIndex));
+            return true;
+        }
+        return hideUtilityLocal(room, state, fallbackPos);
+    }
+
+    private boolean hideUtilityLocal(Models.RoomCandidate room, RoomState state, BlockPos pos) {
+        if (!state.hiddenUtilityPositions.add(pos)) return false;
+        pendingSync.add(Models.SyncUpdate.utility(room.instanceKey(), pos));
+        return true;
+    }
+
+    private static void markSecretNoSync(RoomState state, int secretIndex, BlockPos fallbackPos) {
+        if (secretIndex > 0) state.foundSecretIndices.add(secretIndex);
+        else state.hiddenUtilityPositions.add(fallbackPos);
     }
 
     private static Models.WorldWaypoint inferSingleSecretFromLoadedPlayers(Minecraft mc,
@@ -219,12 +235,10 @@ final class SecretStateTracker {
                                                                             RoomState state) {
         List<Vec3> players = loadedPlayerPositions(mc);
         List<InferenceCandidate> candidates = new ArrayList<>();
-
         for (Models.WorldWaypoint waypoint : all) {
             if (waypoint.utility() || waypoint.secretIndex() <= 0 || state.foundSecretIndices.contains(waypoint.secretIndex())) continue;
             String cat = category(waypoint);
             if (!INFERABLE_SECRET_CATEGORIES.contains(cat)) continue;
-
             double limit = switch (cat) {
                 case "item", "bat" -> 8.5;
                 case "chest", "wither" -> 5.75;
@@ -235,12 +249,9 @@ final class SecretStateTracker {
                 if (distance <= limit) candidates.add(new InferenceCandidate(waypoint, distance));
             }
         }
-
         if (candidates.isEmpty()) return null;
         candidates.sort(Comparator.comparingDouble(InferenceCandidate::distance));
         InferenceCandidate best = candidates.getFirst();
-
-        // Very close is enough by itself. Otherwise require a meaningful margin over another distinct secret.
         if (best.distance() <= 3.4) return best.waypoint();
         InferenceCandidate secondDistinct = candidates.stream()
                 .filter(c -> c.waypoint().secretIndex() != best.waypoint().secretIndex())
@@ -252,11 +263,9 @@ final class SecretStateTracker {
     private static Models.WorldWaypoint findInteractable(List<Models.WorldWaypoint> all, BlockPos pos) {
         for (Models.WorldWaypoint waypoint : all) {
             if (!waypoint.pos().equals(pos)) continue;
-            String category = category(waypoint);
-            if (category.equals("chest") || category.equals("wither") || category.equals("lever")
-                    || category.equals("redstone_key") || category.equals("key")) {
-                return waypoint;
-            }
+            String cat = category(waypoint);
+            if (cat.equals("chest") || cat.equals("wither") || cat.equals("lever")
+                    || cat.equals("redstone_key") || cat.equals("key")) return waypoint;
         }
         return null;
     }
@@ -301,9 +310,7 @@ final class SecretStateTracker {
 
     private static boolean anyPlayerWithin(List<Vec3> players, Vec3 point, double radius) {
         double radiusSq = radius * radius;
-        for (Vec3 player : players) {
-            if (point.distanceToSqr(player) <= radiusSq) return true;
-        }
+        for (Vec3 player : players) if (point.distanceToSqr(player) <= radiusSq) return true;
         return false;
     }
 
@@ -339,13 +346,12 @@ final class SecretStateTracker {
         return waypoint.category().toLowerCase(Locale.ROOT);
     }
 
-    private static void markSecret(RoomState state, int secretIndex, BlockPos fallbackPos) {
-        if (secretIndex > 0) state.foundSecretIndices.add(secretIndex);
-        else state.hiddenUtilityPositions.add(fallbackPos);
+    private RoomState state(Models.RoomCandidate room) {
+        return state(room.instanceKey());
     }
 
-    private RoomState state(Models.RoomCandidate room) {
-        return rooms.computeIfAbsent(room.instanceKey(), ignored -> new RoomState());
+    private RoomState state(String instanceKey) {
+        return rooms.computeIfAbsent(instanceKey, ignored -> new RoomState());
     }
 
     private record InferenceCandidate(Models.WorldWaypoint waypoint, double distance) {}
