@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[65,)"
+license="MIT"
+clientSideOnly=true
+
+[[mods]]
+modId="raissky_secrets"
+version="0.2.0"
+displayName="RaisSky Secrets"
+authors="Raistey"
+description='''
+Modern Minecraft 26.2 Hypixel SkyBlock Dungeon secret waypoints.
+Includes hybrid completion tracking, RaisSky party sync, colored markers, ground routing, movable HUD and puzzle assistance.
+'''
+
+[[dependencies.raissky_secrets]]
+    modId="forge"
+    mandatory=true
+    versionRange="[65.1.0,)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.raissky_secrets]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[26.2,26.3)"
+    ordering="NONE"
+    side="CLIENT"
