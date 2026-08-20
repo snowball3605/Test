@@ -1,4 +1,4 @@
-name: Build RaisSky Secrets Universal 26.2 v0.2.0
+name: Build RaisSky Secrets Universal 26.2 v0.2.1
 
 on:
   pull_request:
@@ -19,16 +19,18 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Restore Forge base source and v0.2.0 bundle
+      - name: Restore Forge base, v0.2.0 bundle, and v0.2.1 overlay
         run: |
-          mkdir -p forge-work /tmp/v020
+          mkdir -p forge-work /tmp/v020 /tmp/v021
           cat raissky-v020/bundle.part00 raissky-v020/bundle.part01 raissky-v020/bundle.part02a raissky-v020/bundle.part02b raissky-v020/bundle.part03 | base64 -d > /tmp/raissky-v020-source.tar.gz
           tar -tzf /tmp/raissky-v020-source.tar.gz >/dev/null
           tar -xzf /tmp/raissky-v020-source.tar.gz -C /tmp/v020
+          tar -tzf raissky-v021/overlay.tar.gz >/dev/null
+          tar -xzf raissky-v021/overlay.tar.gz -C /tmp/v021
           curl -L --fail --retry 3 -o /tmp/raissky-source.tar.gz https://raw.githubusercontent.com/snowball3605/Test/c1b0f474d309d3849778357a16ca36bf71bb4848/raissky-build/source.tar.gz
           tar -xzf /tmp/raissky-source.tar.gz -C forge-work
 
-      - name: Apply v0.2.0 Forge source overrides
+      - name: Apply v0.2.0 source then v0.2.1 HUD route fixes
         run: |
           cp /tmp/v020/forge/build.gradle forge-work/build.gradle
           for f in ClientController.java Models.java SecretStateTracker.java SecretHud.java RouteNavigator.java PuzzleAssistant.java RaisSkySecrets.java; do
@@ -40,6 +42,12 @@ jobs:
           cp /tmp/v020/forge/mods.toml forge-work/src/main/resources/META-INF/mods.toml
           cp raissky-v013/pack.mcmeta forge-work/src/main/resources/pack.mcmeta
 
+          cp /tmp/v021/forge/build.gradle forge-work/build.gradle
+          for f in ClientController.java SecretHud.java RouteNavigator.java RoomMatcher.java RaisSkySecrets.java; do
+            cp "/tmp/v021/forge/$f" "forge-work/src/main/java/dev/raistey/raisskysecrets/$f"
+          done
+          cp /tmp/v021/forge/mods.toml forge-work/src/main/resources/META-INF/mods.toml
+
       - name: Build Forge 65.1.0
         working-directory: forge-work
         run: gradle clean build --no-daemon --stacktrace
@@ -47,7 +55,7 @@ jobs:
       - name: Prepare Fabric source tree
         run: |
           mkdir -p fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric fabric-work/src/main/resources
-          cp /tmp/v020/fabric/build.gradle fabric-work/build.gradle
+          cp /tmp/v021/fabric/build.gradle fabric-work/build.gradle
           cp /tmp/v020/fabric/settings.gradle fabric-work/settings.gradle
           cp /tmp/v020/fabric/gradle.properties fabric-work/gradle.properties
           cp /tmp/v020/fabric/fabric.mod.json fabric-work/src/main/resources/fabric.mod.json
@@ -58,8 +66,8 @@ jobs:
               "forge-work/src/main/java/dev/raistey/raisskysecrets/$f" \
               > "fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/$f"
           done
-          cp /tmp/v020/fabric/ClientController.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
-          cp /tmp/v020/fabric/RaisSkySecrets.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/RaisSkySecrets.java
+          cp /tmp/v021/fabric/ClientController.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
+          cp /tmp/v021/fabric/RaisSkySecrets.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/RaisSkySecrets.java
           sed -i 's/net\.fabricmc\.fabric\.api\.client\.keybinding\.v1\.KeyBindingHelper/net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper/' fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
           sed -i 's/KeyBindingHelper\.registerKeyBinding/KeyMappingHelper.registerKeyMapping/g' fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
 
@@ -69,34 +77,40 @@ jobs:
 
       - name: Assemble one universal JAR
         run: |
-          FORGE_JAR=forge-work/build/libs/RaisSky-Secrets-Forge-26.2-0.2.0.jar
-          FABRIC_JAR=fabric-work/build/libs/RaisSky-Secrets-Fabric-26.2-0.2.0.jar
-          OUT=RaisSky-Secrets-Universal-26.2-0.2.0.jar
+          FORGE_JAR=forge-work/build/libs/RaisSky-Secrets-Forge-26.2-0.2.1.jar
+          FABRIC_JAR=fabric-work/build/libs/RaisSky-Secrets-Fabric-26.2-0.2.1.jar
+          OUT=RaisSky-Secrets-Universal-26.2-0.2.1.jar
           cp "$FORGE_JAR" "$OUT"
           rm -rf /tmp/rs-fabric && mkdir -p /tmp/rs-fabric
           (cd /tmp/rs-fabric && jar xf "$GITHUB_WORKSPACE/$FABRIC_JAR")
           jar uf "$OUT" -C /tmp/rs-fabric dev/raistey/raisskysecrets/fabric -C /tmp/rs-fabric fabric.mod.json
 
-      - name: Verify universal Forge + Fabric JAR
+      - name: Verify universal Forge + Fabric JAR and visibility fixes
         run: |
-          JAR=RaisSky-Secrets-Universal-26.2-0.2.0.jar
+          JAR=RaisSky-Secrets-Universal-26.2-0.2.1.jar
           jar tf "$JAR" | grep -q 'META-INF/mods.toml'
           jar tf "$JAR" | grep -q 'fabric.mod.json'
           jar tf "$JAR" | grep -q 'dev/raistey/raisskysecrets/RaisSkySecrets.class'
           jar tf "$JAR" | grep -q 'dev/raistey/raisskysecrets/fabric/RaisSkySecrets.class'
           jar tf "$JAR" | grep -q 'dev/raistey/raisskysecrets/RouteNavigator.class'
           jar tf "$JAR" | grep -q 'dev/raistey/raisskysecrets/PuzzleAssistant.class'
-          jar tf "$JAR" | grep -q 'dev/raistey/raisskysecrets/fabric/RouteNavigator.class'
           javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.ClientController >/tmp/forge-controller.txt
           javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.fabric.ClientController >/tmp/fabric-controller.txt
+          javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.RouteNavigator >/tmp/forge-route.txt
+          javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.RoomMatcher >/tmp/forge-matcher.txt
+          javap -classpath "$JAR" -c -p dev.raistey.raisskysecrets.SecretHud >/tmp/forge-hud.txt
           grep -q 'net/minecraftforge' /tmp/forge-controller.txt
           grep -q 'net/fabricmc' /tmp/fabric-controller.txt
-          grep -q 'RouteNavigator' /tmp/forge-controller.txt
-          grep -q 'PuzzleAssistant' /tmp/forge-controller.txt
+          grep -q 'routePointCount' /tmp/forge-controller.txt
+          grep -q 'hudContextActive' /tmp/forge-controller.txt
+          grep -q 'particleEngine' /tmp/forge-controller.txt
+          grep -q 'particleEngine' /tmp/forge-route.txt
+          grep -q 'keepStaleOrClear' /tmp/forge-matcher.txt
+          grep -q 'hudContextActive' /tmp/forge-hud.txt
           unzip -t "$JAR"
           sha256sum "$JAR"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RaisSky-Secrets-Universal-26.2-0.2.0
-          path: RaisSky-Secrets-Universal-26.2-0.2.0.jar
+          name: RaisSky-Secrets-Universal-26.2-0.2.1
+          path: RaisSky-Secrets-Universal-26.2-0.2.1.jar
