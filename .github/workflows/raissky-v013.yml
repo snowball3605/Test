@@ -60,6 +60,8 @@ jobs:
           done
           cp /tmp/v020/fabric/ClientController.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
           cp /tmp/v020/fabric/RaisSkySecrets.java fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/RaisSkySecrets.java
+          sed -i 's/net\.fabricmc\.fabric\.api\.client\.keybinding\.v1\.KeyBindingHelper/net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper/' fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
+          sed -i 's/KeyBindingHelper\.registerKeyBinding/KeyMappingHelper.registerKeyMapping/g' fabric-work/src/main/java/dev/raistey/raisskysecrets/fabric/ClientController.java
 
       - name: Build Fabric 26.2
         working-directory: fabric-work
