@@ -22,7 +22,7 @@ jobs:
       - name: Restore Forge base source and v0.2.0 bundle
         run: |
           mkdir -p forge-work /tmp/v020
-          cat raissky-v020/bundle.part00 raissky-v020/bundle.part01 raissky-v020/bundle.part02 raissky-v020/bundle.part03 | base64 -d > /tmp/raissky-v020-source.tar.gz
+          cat raissky-v020/bundle.part00 raissky-v020/bundle.part01 raissky-v020/bundle.part02a raissky-v020/bundle.part02b raissky-v020/bundle.part03 | base64 -d > /tmp/raissky-v020-source.tar.gz
           tar -tzf /tmp/raissky-v020-source.tar.gz >/dev/null
           tar -xzf /tmp/raissky-v020-source.tar.gz -C /tmp/v020
           curl -L --fail --retry 3 -o /tmp/raissky-source.tar.gz https://raw.githubusercontent.com/snowball3605/Test/c1b0f474d309d3849778357a16ca36bf71bb4848/raissky-build/source.tar.gz
