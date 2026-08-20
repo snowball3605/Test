@@ -25,8 +25,9 @@ jobs:
           cat raissky-v020/bundle.part00 raissky-v020/bundle.part01 raissky-v020/bundle.part02a raissky-v020/bundle.part02b raissky-v020/bundle.part03 | base64 -d > /tmp/raissky-v020-source.tar.gz
           tar -tzf /tmp/raissky-v020-source.tar.gz >/dev/null
           tar -xzf /tmp/raissky-v020-source.tar.gz -C /tmp/v020
-          tar -tzf raissky-v021/overlay.tar.gz >/dev/null
-          tar -xzf raissky-v021/overlay.tar.gz -C /tmp/v021
+          cat raissky-v021/overlay.part00 raissky-v021/overlay.part01 raissky-v021/overlay.part02 raissky-v021/overlay.part03 | base64 -d > /tmp/raissky-v021-overlay.tar.gz
+          tar -tzf /tmp/raissky-v021-overlay.tar.gz >/dev/null
+          tar -xzf /tmp/raissky-v021-overlay.tar.gz -C /tmp/v021
           curl -L --fail --retry 3 -o /tmp/raissky-source.tar.gz https://raw.githubusercontent.com/snowball3605/Test/c1b0f474d309d3849778357a16ca36bf71bb4848/raissky-build/source.tar.gz
           tar -xzf /tmp/raissky-source.tar.gz -C forge-work
 
